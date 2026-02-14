@@ -1,48 +1,34 @@
-# Will you be my valentine?
+# 💝 Will You Be My Valentine?
 
-**Valentine Page Creator**: https://i143.xyz/create
+Une page web interactive et fun pour la Saint-Valentin ! Pose la question à ta personne spéciale de manière originale et impossible à refuser 😄
 
+## ✨ Fonctionnalités
 
-## Custom Templates
-Click on the template of your choice, and create your valentine pages under 1 minute. : https://i143.xyz/templates
+- **Question interactive** — Le bouton "Oui" grandit à chaque refus, rendant le "Non" de plus en plus difficile
+- **Phrases drôles** — Chaque clic sur "Non" révèle un nouveau message hilarant
+- **Animation de célébration** — Quand elle dit "Oui", une card animée apparaît avec un GIF
+- **Pluie d'emojis cœurs** — Des emojis ❤️💕💖🥰😍 tombent en arrière-plan
+- **Physique réaliste (mobile)** — Les emojis ont des collisions grâce à Matter.js
+- **Effet boule à neige (mobile)** — Secoue ton téléphone pour faire rebondir les emojis !
+- **Gyroscope (mobile)** — Incline ton téléphone pour changer la gravité des emojis
+- **Animation simple (desktop)** — Les emojis défilent doucement en arrière-plan
+- **Responsive** — Optimisé pour les écrans de téléphone
 
-- **100% Free**. 🆓
-- Easy to Use. **No Codeing** required. 🎉
-- With **custom subdomain** of your choice (Obviously not claimed by anyone else). 🌍
-- With **custom texts** of your choice. 💬
-- With **custom images** of your choice. 👩‍❤️‍👨
-- With **40 Beautiful** templates to start from. 🤩
+## 🛠️ Technologies
 
+- React + TypeScript
+- Vite
+- Tailwind CSS
+- Framer Motion
+- Matter.js (moteur physique)
 
-# Demo
-Github Pages : https://saurabhnemade.github.io/will-you-be-my-valentine/
+## 🚀 Lancement
 
-
-# Description
-This is a fun project for valentines day to bring smile on face of your special person!!
-
-This project is inspired from
-https://gist.github.com/tnarla/0c09a11fea366145ba684fe6ebf578c5 & https://www.tiktok.com/@mewtru/video/7331131143112166698
-
-# How to start
-```
-npm install -g pnpm
-pnpm i
-pnpm run dev
+```bash
+npm install
+npm run dev
 ```
 
-# Preview
+## 📱 Utilisation
 
-![image description](demo.gif)
-
-
-# How to deploy it
-```
-pnpm run deploy
-```
-
-# Reporting Issues
-
-You can report issues directly at saurabh@agnt.dev
-
-Made with ❤️ in Berlin!
+Ouvre le lien sur le téléphone de la personne concernée et laisse la magie opérer ! 💘
