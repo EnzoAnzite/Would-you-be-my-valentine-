@@ -1,5 +1,5 @@
 "use client";
-import { useState, useEffect, useRef, useMemo } from "react";
+import { useState, useEffect, useRef } from "react";
 import { motion, AnimatePresence } from "framer-motion";
 import { Card, CardContent } from "@/components/ui/card";
 import celebrationGif from "@/assets/celebration.gif";
@@ -8,61 +8,7 @@ import Matter from "matter-js";
 const HEART_EMOJIS = ["❤️", "💕", "💖", "💗", "💘", "💝", "🥰", "😍", "💞", "💓"];
 const TOTAL_HEARTS = 80;
 
-function useIsMobile() {
-  const [isMobile, setIsMobile] = useState(false);
-  useEffect(() => {
-    const check = "ontouchstart" in window || navigator.maxTouchPoints > 0;
-    setIsMobile(check);
-  }, []);
-  return isMobile;
-}
-
-// ─── Desktop: simple falling emojis ───
-function SimpleFloatingHearts() {
-  const hearts = useMemo(
-    () =>
-      Array.from({ length: 30 }, (_, i) => ({
-        id: i,
-        emoji: HEART_EMOJIS[Math.floor(Math.random() * HEART_EMOJIS.length)],
-        left: Math.random() * 100,
-        size: Math.random() * 16 + 14,
-        duration: Math.random() * 6 + 6,
-        delay: Math.random() * 10,
-        swingAmount: Math.random() * 50 - 25,
-      })),
-    []
-  );
-
-  return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
-      {hearts.map((heart) => (
-        <motion.div
-          key={heart.id}
-          style={{
-            position: "absolute",
-            left: `${heart.left}%`,
-            top: -40,
-            fontSize: heart.size,
-          }}
-          animate={{
-            y: ["0vh", "110vh"],
-            x: [0, heart.swingAmount, -heart.swingAmount, 0],
-            rotate: [0, 360],
-          }}
-          transition={{
-            y: { duration: heart.duration, repeat: Infinity, delay: heart.delay, ease: "linear" },
-            x: { duration: heart.duration / 2, repeat: Infinity, delay: heart.delay, ease: "easeInOut" },
-            rotate: { duration: heart.duration * 2, repeat: Infinity, delay: heart.delay, ease: "linear" },
-          }}
-        >
-          {heart.emoji}
-        </motion.div>
-      ))}
-    </div>
-  );
-}
-
-// ─── Mobile: physics-based with collisions ───
+// ─── Universal: physics-based with collisions ───
 interface HeartState {
   id: number;
   emoji: string;
@@ -72,133 +18,164 @@ interface HeartState {
   size: number;
 }
 
-function PhysicsHearts() {
+function FallingHearts() {
   const [hearts, setHearts] = useState<HeartState[]>([]);
   const engineRef = useRef<Matter.Engine | null>(null);
-  const bodiesRef = useRef<{ body: Matter.Body; emoji: string; size: number }[]>([]);
-  const spawnedRef = useRef(0);
-  const rafRef = useRef<number>(0);
+  const bodiesRef = useRef<{ id: number; body: Matter.Body; emoji: string; size: number }[]>([]);
+  const sceneRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
+    // 1. Setup Matter.js Engine
+    const engine = Matter.Engine.create({
+      gravity: { x: 0, y: 1, scale: 0.005 }, // Adjusted gravity for mobile feel
+      enableSleeping: false // IMPORTANT: Prevent bodies from freezing
+    });
+    engineRef.current = engine;
+
     const width = window.innerWidth;
     const height = window.innerHeight;
 
-    const engine = Matter.Engine.create({ gravity: { x: 0, y: 1, scale: 0.002 } });
-    engineRef.current = engine;
+    // 2. Create Walls
+    const wallThickness = 1000; // Very thick walls to prevent tunneling
+    // Raised floor by 5px (-10 -> -15)
+    const floor = Matter.Bodies.rectangle(width / 2, height + wallThickness / 2 - 35, width * 2, wallThickness, { isStatic: true, label: "Floor" });
+    const ceiling = Matter.Bodies.rectangle(width / 2, -wallThickness / 2 - 1000, width * 2, wallThickness, { isStatic: true, label: "Ceiling" }); // High ceiling
+    const leftWall = Matter.Bodies.rectangle(-wallThickness / 2 - 10, height / 2, wallThickness, height * 5, { isStatic: true, label: "Left Wall" });
+    const rightWall = Matter.Bodies.rectangle(width + wallThickness / 2 + 10, height / 2, wallThickness, height * 5, { isStatic: true, label: "Right Wall" });
 
-    const wallThickness = 60;
-    const floor = Matter.Bodies.rectangle(width / 2, height + wallThickness / 2, width, wallThickness, { isStatic: true });
-    const ceiling = Matter.Bodies.rectangle(width / 2, -wallThickness / 2, width, wallThickness, { isStatic: true });
-    const leftWall = Matter.Bodies.rectangle(-wallThickness / 2, height / 2, wallThickness, height * 2, { isStatic: true });
-    const rightWall = Matter.Bodies.rectangle(width + wallThickness / 2, height / 2, wallThickness, height * 2, { isStatic: true });
     Matter.Composite.add(engine.world, [floor, ceiling, leftWall, rightWall]);
 
-    // Request motion permission on iOS
-    const requestMotionPermission = async () => {
-      const doe = DeviceOrientationEvent as unknown as { requestPermission?: () => Promise<string> };
-      if (typeof doe.requestPermission === "function") {
-        try { await doe.requestPermission(); } catch {}
-      }
-      const dme = DeviceMotionEvent as unknown as { requestPermission?: () => Promise<string> };
-      if (typeof dme.requestPermission === "function") {
-        try { await dme.requestPermission(); } catch {}
-      }
-    };
-    requestMotionPermission();
-
-    // Device orientation: tilt changes gravity
-    const handleOrientation = (e: DeviceOrientationEvent) => {
-      if (!engineRef.current) return;
-      if (e.beta === null && e.gamma === null) return;
-      const gamma = (e.gamma ?? 0) / 90;
-      const beta = Math.min(Math.max((e.beta ?? 90), -90), 90) / 90;
-      engineRef.current.gravity.x = gamma;
-      engineRef.current.gravity.y = Math.max(beta, 0.3);
-    };
-    window.addEventListener("deviceorientation", handleOrientation);
-
-    // Device motion: shake = snow globe
-    let lastShakeTime = 0;
-    const handleMotion = (e: DeviceMotionEvent) => {
-      const acc = e.accelerationIncludingGravity;
-      if (!acc) return;
-      const force = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
-      const now = Date.now();
-      if (force > 25 && now - lastShakeTime > 300) {
-        lastShakeTime = now;
-        bodiesRef.current.forEach(({ body }) => {
-          Matter.Body.setVelocity(body, {
-            x: (Math.random() - 0.5) * 15,
-            y: -(Math.random() * 10 + 5),
-          });
-        });
-      }
-    };
-    window.addEventListener("devicemotion", handleMotion);
-
-    // Spawn hearts
+    // 3. Spawn Hearts
+    let spawnedCount = 0;
     const spawnInterval = setInterval(() => {
-      if (spawnedRef.current >= TOTAL_HEARTS) {
+      if (spawnedCount >= TOTAL_HEARTS) {
         clearInterval(spawnInterval);
         return;
       }
-      const size = Math.random() * 14 + 18;
-      const body = Matter.Bodies.circle(
-        Math.random() * (width - 60) + 30,
-        -30 - Math.random() * 200,
-        size / 2,
-        { restitution: 0.4, friction: 0.3, density: 0.002, frictionAir: 0.01 }
-      );
-      Matter.Body.setVelocity(body, { x: (Math.random() - 0.5) * 3, y: 0 });
+
+      const size = Math.random() * 20 + 20; // Size 20-40px
+      const xPos = Math.random() * (width - 40) + 20;
+      const yPos = -50 - Math.random() * 200; // Start above screen
+
+      const body = Matter.Bodies.circle(xPos, yPos, size / 2.2, { // Hitbox slightly smaller than emoji
+        restitution: 0.5, // Bounciness
+        friction: 0.5,    // Friction against other bodies
+        density: 0.05,    // Mass
+        frictionAir: 0.01,// Air resistance
+        isStatic: false,
+        label: "Heart"
+      });
+
+      // Give random initial spin and velocity
+      Matter.Body.setAngularVelocity(body, (Math.random() - 0.5) * 0.2);
+      Matter.Body.setVelocity(body, { x: (Math.random() - 0.5) * 2, y: 5 + Math.random() * 5 });
+
+      Matter.Composite.add(engine.world, body);
+
       bodiesRef.current.push({
+        id: spawnedCount,
         body,
         emoji: HEART_EMOJIS[Math.floor(Math.random() * HEART_EMOJIS.length)],
         size,
       });
-      Matter.Composite.add(engine.world, body);
-      spawnedRef.current++;
-    }, 100);
 
-    // Physics loop
-    let lastTime = performance.now();
-    const update = (time: number) => {
-      const delta = Math.min(time - lastTime, 30);
-      lastTime = time;
-      Matter.Engine.update(engine, delta);
-      const newHearts: HeartState[] = bodiesRef.current.map((h, i) => ({
-        id: i,
+      spawnedCount++;
+    }, 50); // Spawn faster (every 50ms)
+
+    // 4. Input Handlers (Device Motion & Orientation)
+    const handleOrientation = (e: DeviceOrientationEvent) => {
+      if (!engineRef.current) return;
+      const gamma = (e.gamma ?? 0) / 90; // Tilt L/R (-1 to 1)
+      const beta = Math.min(Math.max((e.beta ?? 90), -90), 90) / 90; // Tilt F/B (-1 to 1)
+      
+      // Update gravity direction
+      engineRef.current.gravity.x = gamma * 1.5;
+      engineRef.current.gravity.y = Math.max(beta, 0.2) * 1.5; // Always keep some downward pull
+    };
+
+    let lastShake = 0;
+    const handleMotion = (e: DeviceMotionEvent) => {
+      const acc = e.accelerationIncludingGravity;
+      if (!acc) return;
+      const force = Math.sqrt((acc.x || 0) ** 2 + (acc.y || 0) ** 2 + (acc.z || 0) ** 2);
+      
+      if (force > 20 && Date.now() - lastShake > 300) { // Shake threshold
+        lastShake = Date.now();
+        // Snow globe effect: Apply upward/random force to all hearts
+        bodiesRef.current.forEach(({ body }) => {
+          Matter.Body.applyForce(body, body.position, {
+            x: (Math.random() - 0.5) * 0.05 * body.mass,
+            y: -0.05 * body.mass - Math.random() * 0.02 * body.mass // Upward kick
+          });
+        });
+      }
+    };
+
+    window.addEventListener("deviceorientation", handleOrientation);
+    window.addEventListener("devicemotion", handleMotion);
+
+    // Request permissions (iOS)
+    (async () => {
+        const doe = DeviceOrientationEvent as any;
+        if (typeof doe.requestPermission === 'function') {
+            try { await doe.requestPermission(); } catch {}
+        }
+        const dme = DeviceMotionEvent as any;
+        if (typeof dme.requestPermission === 'function') {
+            try { await dme.requestPermission(); } catch {}
+        }
+    })();
+
+
+    // 5. Runner & Render Loop
+    const runner = Matter.Runner.create();
+    Matter.Runner.run(runner, engine);
+
+    let rafId = 0;
+    const render = () => {
+      // Sync React state with Matter.js positions
+      setHearts(bodiesRef.current.map(h => ({
+        id: h.id,
         emoji: h.emoji,
         x: h.body.position.x,
         y: h.body.position.y,
         angle: h.body.angle,
-        size: h.size,
-      }));
-      setHearts(newHearts);
-      rafRef.current = requestAnimationFrame(update);
+        size: h.size
+      })));
+      rafId = requestAnimationFrame(render);
     };
-    rafRef.current = requestAnimationFrame(update);
+    rafId = requestAnimationFrame(render);
 
+    // 6. Cleanup
     return () => {
       clearInterval(spawnInterval);
-      cancelAnimationFrame(rafRef.current);
+      cancelAnimationFrame(rafId);
+      Matter.Runner.stop(runner);
+      Matter.Engine.clear(engine);
       window.removeEventListener("deviceorientation", handleOrientation);
       window.removeEventListener("devicemotion", handleMotion);
-      Matter.Engine.clear(engine);
     };
   }, []);
 
   return (
-    <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+    <div ref={sceneRef} className="fixed inset-0 pointer-events-none overflow-hidden z-0 touch-none">
+       {/* DEBUG: Remove this later if visible */}
+       {/* <div className="absolute top-0 left-0 bg-black/50 text-white text-xs p-1 z-50">
+          Hearts: {hearts.length}
+       </div> */}
+
       {hearts.map((heart) => (
         <div
           key={heart.id}
           style={{
             position: "absolute",
-            left: heart.x,
-            top: heart.y,
-            fontSize: heart.size,
-            transform: `translate(-50%, -50%) rotate(${heart.angle}rad)`,
-            willChange: "transform",
+            left: 0,
+            top: 0,
+            transform: `translate(${heart.x}px, ${heart.y}px) rotate(${heart.angle}rad) translate(-50%, -50%)`,
+            fontSize: `${heart.size}px`,
+            lineHeight: 1,
+            userSelect: "none",
+            willChange: "transform"
           }}
         >
           {heart.emoji}
@@ -206,12 +183,6 @@ function PhysicsHearts() {
       ))}
     </div>
   );
-}
-
-// ─── Wrapper: picks the right component ───
-function FallingHearts() {
-  const isMobile = useIsMobile();
-  return isMobile ? <PhysicsHearts /> : <SimpleFloatingHearts />;
 }
 
 export default function Page() {
